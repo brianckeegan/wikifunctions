@@ -838,7 +838,7 @@ def get_pageviews(page_title,endpoint='en.wikipedia.org',date_from='20150701',da
     else:
         multicore_dict[page_title] = s
     
-def get_category_memberships(page_title,lang='en'):
+def get_category_memberships(page_title,endpoint='en.wikipedia.org/w/api.php'):
     """The function accepts a page_title and returns a list of categories
     the page is a member of
     
@@ -848,8 +848,18 @@ def get_category_memberships(page_title,lang='en'):
     members - a list containing strings of the categories of which the page is a mamber
     
     """
-    _S="https://{1}.wikipedia.org/w/api.php?action=query&prop=categories&titles={0}&clprop=timestamp&clshow=!hidden&cllimit=500&format=json&formatversion=2".format(page_title,lang)
-    json_response = requests.get(_S).json()
+    query_url = "https://{0}".format(endpoint)
+    query_params = {}
+    query_params['action'] = 'query'
+    query_params['prop'] = 'categories'
+    query_params['titles'] = page_title
+    query_params['clprop'] = 'timestamp'
+    query_params['clshow'] = '!hidden'
+    query_params['cllimit'] = 500
+    query_params['format'] = 'json'
+    query_params['formatversion'] = 2
+    
+    json_response = requests.get(url=query_url,params=query_params).json()
 
     categories = list()
 
