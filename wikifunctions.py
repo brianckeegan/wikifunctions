@@ -1,10 +1,9 @@
-import numpy as np
 import pandas as pd
 from datetime import datetime
 from bs4 import BeautifulSoup
 from urllib.parse import unquote, quote
 from copy import deepcopy
-import requests, json, re
+import requests, re
 
 def response_to_revisions(json_response):
     if type(json_response['query']['pages']) == dict:
