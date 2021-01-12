@@ -277,9 +277,7 @@ def resolve_redirects(page_list,endpoint="en.wikipedia.org/w/api.php"):
     return resolved_page_list
 
 def get_page_raw_content(page_title, endpoint='en.wikipedia.org/w/api.php', redirects=1):
-    """Takes a page title and returns a list of wiki-links on the page. The 
-    list may contain duplicates and the position in the list is approximately 
-    where the links occurred.
+    """Takes a page title and returns the raw HTML.
     
     page_title - a string with the title of the page on Wikipedia
     endpoint - a string that points to the web address of the API.
@@ -374,9 +372,7 @@ def parse_to_links(input,is_json=True):
     return outlinks_list
         
 def get_revision_raw_content(revid, endpoint='en.wikipedia.org/w/api.php', redirects=1):
-    """Takes a page title and returns a list of wiki-links on the page. The 
-    list may contain duplicates and the position in the list is approximately 
-    where the links occurred.
+    """Takes a revision ID and returns the raw HTML.
     
     page_title - a string with the title of the page on Wikipedia
     endpoint - a string that points to the web address of the API.
@@ -773,8 +769,10 @@ def get_pageviews(page_title,endpoint='en.wikipedia.org',start='20150701',stop='
     """Takes Wikipedia page title and returns a all the various pageview records
     
     page_title - a string with the title of the page on Wikipedia
-    lang - a string (typically two letter ISO 639-1 code) for the language edition,
-    defaults to "en"
+    endpoint - a string that points to the web address of the API.
+        This defaults to the English Wikipedia endpoint: 'en.wikipedia.org/w/api.php'
+        Changing the two letter language code will return a different language edition
+        The Wikia endpoints are slightly different, e.g. 'starwars.wikia.com/api.php'
     start - a date string in a YYYYMMDD format, defaults to 20150701 (earliest date)
     stop - a date string in a YYYYMMDD format, defaults to today
         
@@ -944,8 +942,10 @@ def get_user_info(username_list,endpoint='en.wikipedia.org/w/api.php'):
     """Takes a list of Wikipedia usernames and returns a JSON of their information
     
     username_list - a list of strings for all the usernames
-    lang - a string (typically two letter ISO 639-1 code) for the language edition,
-        defaults to "en"
+    endpoint - a string that points to the web address of the API.
+        This defaults to the English Wikipedia endpoint: 'en.wikipedia.org/w/api.php'
+        Changing the two letter language code will return a different language edition
+        The Wikia endpoints are slightly different, e.g. 'starwars.wikia.com/api.php'
         
     Returns:
     users_info - a list of information about users
