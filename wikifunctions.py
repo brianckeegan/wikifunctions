@@ -1,14 +1,10 @@
 import numpy as np
 import pandas as pd
-
 from datetime import datetime
 from bs4 import BeautifulSoup
 from urllib.parse import unquote, quote
 from copy import deepcopy
-
-import networkx as nx
-
-import requests, json, re, time
+import requests, json, re
 
 def response_to_revisions(json_response):
     if type(json_response['query']['pages']) == dict:
@@ -95,7 +91,7 @@ def get_all_page_revisions(page_title, endpoint='en.wikipedia.org/w/api.php', re
     
     return df
     
-def get_page_revisions_from_date(page_title, endpoint='en.wikipedia.org/w/api.php', redirects=1, rvstart='2001-01-07T00:00:00Z'):
+def get_page_revisions_from_date(page_title, endpoint='en.wikipedia.org/w/api.php', redirects=1, start='2001-01-01',stop='today'):
     """Takes Wikipedia page title and returns a DataFrame of revisions
     
     page_title - a string with the title of the page on Wikipedia
@@ -104,6 +100,8 @@ def get_page_revisions_from_date(page_title, endpoint='en.wikipedia.org/w/api.ph
         Changing the two letter language code will return a different language edition
         The Wikia endpoints are slightly different, e.g. 'starwars.wikia.com/api.php'
     redirects - a Boolean value for whether to follow redirects to another page
+    start - a string, datetime, or Timestamp object when revisions should start
+    stop - a string, datetime, or Timestamp object when revisions should stop
         
     Returns:
     df - a pandas DataFrame where each row is a revision and columns correspond
@@ -112,6 +110,10 @@ def get_page_revisions_from_date(page_title, endpoint='en.wikipedia.org/w/api.ph
     
     # A container to store all the revisions
     revision_list = list()
+    
+    # Fix dates
+    start = datetime.strftime(pd.to_datetime(start), '%Y-%m-%dT%H:%M:%SZ')
+    stop = datetime.strftime(pd.to_datetime(stop), '%Y-%m-%dT%H:%M:%SZ')
     
     # Set up the query
     query_url = "https://{0}".format(endpoint)
@@ -124,7 +126,8 @@ def get_page_revisions_from_date(page_title, endpoint='en.wikipedia.org/w/api.ph
     query_params['rvdir'] = 'newer'
     query_params['format'] = 'json'
     query_params['redirects'] = redirects
-    query_params['rvstart'] = rvstart
+    query_params['rvstart'] = start
+    query_params['rvend'] = stop
     query_params['formatversion'] = 2
     
     # Make the query
@@ -767,24 +770,22 @@ def get_interlanguage_links(page_title, endpoint='en.wikipedia.org/w/api.php', r
             
     return interlanguage_link_dict
     
-def get_pageviews(page_title,endpoint='en.wikipedia.org',date_from='20150701',date_to='today'):
+def get_pageviews(page_title,endpoint='en.wikipedia.org',start='20150701',stop='today'):
     """Takes Wikipedia page title and returns a all the various pageview records
     
     page_title - a string with the title of the page on Wikipedia
     lang - a string (typically two letter ISO 639-1 code) for the language edition,
-        defaults to "en"
-        datefrom - a date string in a YYYYMMDD format, defaults to 20150701 (earliest date)
-        dateto - a date string in a YYYYMMDD format, defaults to today
+    defaults to "en"
+    start - a date string in a YYYYMMDD format, defaults to 20150701 (earliest date)
+    stop - a date string in a YYYYMMDD format, defaults to today
         
     Returns:
     df - a DataFrame indexed by date and multi-columned by agent and access type
     """
-    if date_to == 'today':
-        date_to = str(datetime.today().date()).replace('-','')
-        
+            
     quoted_page_title = quote(page_title, safe='')
-    date_from = datetime.strftime(pd.to_datetime(date_from),'%Y%m%d')
-    date_to = datetime.strftime(pd.to_datetime(date_to),'%Y%m%d')
+    date_from = datetime.strftime(pd.to_datetime(start),'%Y%m%d')
+    date_to = datetime.strftime(pd.to_datetime(stop),'%Y%m%d')
     
     #for access in ['all-access','desktop','mobile-app','mobile-web']:
     #for agent in ['all-agents','user','spider','bot']:
@@ -974,7 +975,7 @@ def get_user_info(username_list,endpoint='en.wikipedia.org/w/api.php'):
     
     return users_info
 
-def get_user_contributions(username,endpoint='en.wikipedia.org/w/api.php', redirects=1,start=pd.Timestamp('2001-01-01'),stop=pd.Timestamp('today')):
+def get_user_contributions(username,endpoint='en.wikipedia.org/w/api.php', redirects=1,start='2001-01-01',stop='today'):
     """Takes Wikipedia username and returns a DataFrame of user contributions
     
     username - a string with the title of the page on Wikipedia
@@ -982,8 +983,8 @@ def get_user_contributions(username,endpoint='en.wikipedia.org/w/api.php', redir
         This defaults to the English Wikipedia endpoint: 'en.wikipedia.org/w/api.php'
         Changing the two letter language code will return a different language edition
         The Wikia endpoints are slightly different, e.g. 'starwars.wikia.com/api.php'
-    start - a datetime or Timestamp for the earliest user contributions to retrieve
-    stop - a datetime or Timestamp for the latest user contributions to retrieve
+    start - a string, datetime, or Timestamp for the earliest user contributions to retrieve
+    stop - a string, datetime, or Timestamp for the latest user contributions to retrieve
         
     Returns:
     usercontribs_df - a DataFrame containing the revision meta-data such as 
@@ -991,9 +992,8 @@ def get_user_contributions(username,endpoint='en.wikipedia.org/w/api.php', redir
         
     API endpoint docs: https://www.mediawiki.org/wiki/API:Usercontribs
     """
-    
-    start_utc = datetime.strftime(start, '%Y-%m-%dT%H:%M:%SZ')
-    stop_utc = datetime.strftime(stop, '%Y-%m-%dT%H:%M:%SZ')
+    start = datetime.strftime(pd.to_datetime(start), '%Y-%m-%dT%H:%M:%SZ')
+    stop = datetime.strftime(pd.to_datetime(stop), '%Y-%m-%dT%H:%M:%SZ')
     
     revision_list = list()
     
@@ -1004,8 +1004,8 @@ def get_user_contributions(username,endpoint='en.wikipedia.org/w/api.php', redir
     query_params['list'] = 'usercontribs'
     query_params['ucuser'] = username
     query_params['ucprop'] = 'ids|title|comment|timestamp|flags|size|sizediff'
-    query_params['ucstart'] = start_utc
-    query_params['ucend'] = stop_utc
+    query_params['ucstart'] = start
+    query_params['ucend'] = stop
     query_params['uclimit'] = 500
     query_params['ucdir'] = 'newer'
     query_params['format'] = 'json'
