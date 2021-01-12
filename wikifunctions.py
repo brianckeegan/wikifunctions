@@ -22,7 +22,7 @@ def response_to_revisions(json_response):
     else:
         raise ValueError("There are no revisions in the JSON")
         
-def get_all_page_revisions(page_title, endpoint='en.wikipedia.org/w/api.php', redirects=1, multicore_dict=None):
+def get_all_page_revisions(page_title, endpoint='en.wikipedia.org/w/api.php', redirects=1):
     """Takes Wikipedia page title and returns a DataFrame of revisions
     
     page_title - a string with the title of the page on Wikipedia
@@ -93,12 +93,9 @@ def get_all_page_revisions(page_title, endpoint='en.wikipedia.org/w/api.php', re
     df['lag'] = df['timestamp'].diff()/pd.Timedelta(1,'s')
     df['age'] = (df['timestamp'] - df['timestamp'].min())/pd.Timedelta(1,'d')
     
-    if multicore_dict is None:
-        return {final_title:df}
-    else:
-        multicore_dict[final_title] = df
+    return df
     
-def get_page_revisions_from_date(page_title, endpoint='en.wikipedia.org/w/api.php', redirects=1, rvstart='2001-01-07T00:00:00Z', multicore_dict=None):
+def get_page_revisions_from_date(page_title, endpoint='en.wikipedia.org/w/api.php', redirects=1, rvstart='2001-01-07T00:00:00Z'):
     """Takes Wikipedia page title and returns a DataFrame of revisions
     
     page_title - a string with the title of the page on Wikipedia
@@ -170,10 +167,7 @@ def get_page_revisions_from_date(page_title, endpoint='en.wikipedia.org/w/api.ph
     df['lag'] = df['timestamp'].diff()/pd.Timedelta(1,'s')
     df['age'] = (df['timestamp'] - df['timestamp'].min())/pd.Timedelta(1,'d')
 
-    if multicore_dict is None:
-        return {final_title:df}
-    else:
-        multicore_dict[final_title] = df
+    return df
     
 def chunks(l, n=50):
     """
@@ -183,7 +177,7 @@ def chunks(l, n=50):
     for i in range(0, len(l), n):
         yield l[i:i + n]
 
-def get_redirects_linking_here(page_title, endpoint="en.wikipedia.org/w/api.php", namespace=0, multicore_dict=None):
+def get_redirects_linking_here(page_title, endpoint="en.wikipedia.org/w/api.php", namespace=0):
     """Takes a page title and returns a list of redirects linking to the page
     
     page_title - a string with the title of the page on Wikipedia
@@ -233,10 +227,7 @@ def get_redirects_linking_here(page_title, endpoint="en.wikipedia.org/w/api.php"
                 subquery_lh_list = json_response['query']['pages'][0]['linkshere']
                 lh_list += subquery_lh_list
     
-    if multicore_dict is None:
-        return {page_title:[i['title'] for i in lh_list]}
-    else:
-        multicore_dict[page_title] = [i['title'] for i in lh_list]
+    return [i['title'] for i in lh_list]
 
 def get_redirects_map(page_list, endpoint="en.wikipedia.org/w/api.php"):
     redirects_d = {}
@@ -283,7 +274,7 @@ def resolve_redirects(page_list,endpoint="en.wikipedia.org/w/api.php"):
             
     return resolved_page_list
 
-def get_page_raw_content(page_title, endpoint='en.wikipedia.org/w/api.php', redirects=1, multicore_dict=None):
+def get_page_raw_content(page_title, endpoint='en.wikipedia.org/w/api.php', redirects=1):
     """Takes a page title and returns a list of wiki-links on the page. The 
     list may contain duplicates and the position in the list is approximately 
     where the links occurred.
@@ -322,11 +313,8 @@ def get_page_raw_content(page_title, endpoint='en.wikipedia.org/w/api.php', redi
     else:
         markup = str()
         final_title = page_title
-        
-    if multicore_dict is None:
-        return {final_title:markup}
-    else:
-        multicore_dict[final_title] = markup
+    
+    return markup
 
 def parse_to_links(input,is_json=True):
     # Initialize an empty list to store the links
@@ -383,7 +371,7 @@ def parse_to_links(input,is_json=True):
     
     return outlinks_list
         
-def get_revision_raw_content(revid, endpoint='en.wikipedia.org/w/api.php', redirects=1, multicore_dict=None):
+def get_revision_raw_content(revid, endpoint='en.wikipedia.org/w/api.php', redirects=1):
     """Takes a page title and returns a list of wiki-links on the page. The 
     list may contain duplicates and the position in the list is approximately 
     where the links occurred.
@@ -422,12 +410,9 @@ def get_revision_raw_content(revid, endpoint='en.wikipedia.org/w/api.php', redir
         markup = str()
         final_title = page_title
         
-    if multicore_dict is None:
-        return {final_title:markup}
-    else:
-        multicore_dict[final_title] = markup
+    return markup
     
-def get_page_outlinks(page_title, endpoint='en.wikipedia.org/w/api.php', redirects=1, multicore_dict=None):
+def get_page_outlinks(page_title, endpoint='en.wikipedia.org/w/api.php', redirects=1):
     """Takes a page title and returns a list of wiki-links on the page. The 
     list may contain duplicates and the position in the list is approximately 
     where the links occurred.
@@ -467,13 +452,9 @@ def get_page_outlinks(page_title, endpoint='en.wikipedia.org/w/api.php', redirec
         links = list()
         final_title = page_title
         
-    if multicore_dict is None:
-        return {final_title:links}
-    else:
-        multicore_dict[final_title] = links
+    return links    
     
-    
-def get_revision_outlinks(revid, endpoint='en.wikipedia.org/w/api.php', multicore_dict=None):
+def get_revision_outlinks(revid, endpoint='en.wikipedia.org/w/api.php'):
     """Takes a page title and returns a list of wiki-links on the page. The 
     list may contain duplicates and the position in the list is approximately 
     where the links occurred.
@@ -507,17 +488,12 @@ def get_revision_outlinks(revid, endpoint='en.wikipedia.org/w/api.php', multicor
     
     if 'parse' in json_response.keys():
         return parse_to_links(json_response)
-        # final_title = json_response['parse']['title']
     else:
         return list()
-        # final_title = page_title    
 
-    if multicore_dict is None:
-        return {final_title:links}
-    else:
-        multicore_dict[final_title] = links
+    return links
     
-def get_page_externallinks(page_title, endpoint='en.wikipedia.org/w/api.php', redirects=1, multicore_dict=None):
+def get_page_externallinks(page_title, endpoint='en.wikipedia.org/w/api.php', redirects=1):
     """Takes a revision id and returns a list of external links on the revision
     
     revid - a numeric revision id as a string
@@ -557,12 +533,9 @@ def get_page_externallinks(page_title, endpoint='en.wikipedia.org/w/api.php', re
         links = list()
         final_title = page_title
         
-    if multicore_dict is None:
-        return {final_title:links}
-    else:
-        multicore_dict[final_title] = links
-        
-def get_revision_externallinks(revid, endpoint='en.wikipedia.org/w/api.php', redirects=1, multicore_dict=None):
+    return links
+            
+def get_revision_externallinks(revid, endpoint='en.wikipedia.org/w/api.php', redirects=1):
     """Takes a revision id and returns a list of external links on the revision
     
     revid - a numeric revision id as a string
@@ -601,10 +574,7 @@ def get_revision_externallinks(revid, endpoint='en.wikipedia.org/w/api.php', red
         links = list()
         final_title = page_title
         
-    if multicore_dict is None:
-        return {final_title:links}
-    else:
-        multicore_dict[final_title] = links
+    return links
         
 def parse_to_text(input,is_json=True,parse_text=True):
     if is_json:
@@ -647,7 +617,7 @@ def parse_to_text(input,is_json=True,parse_text=True):
 
     return '\n'.join(text_list)
     
-def get_page_content(page_title, endpoint='en.wikipedia.org/w/api.php', redirects=1, parsed_text=1, multicore_dict=None):
+def get_page_content(page_title, endpoint='en.wikipedia.org/w/api.php', redirects=1, parsed_text=1):
     """Takes a page_title and returns a (large) string of the content 
     of the revision.
     
@@ -750,7 +720,7 @@ def get_page_redirects(page_list,endpoint='en.wikipedia.org/w/api.php'):
             
     return page_redirects
 
-def get_interlanguage_links(page_title, endpoint='en.wikipedia.org/w/api.php', redirects=1, multicore_dict=None):
+def get_interlanguage_links(page_title, endpoint='en.wikipedia.org/w/api.php', redirects=1):
     """The function accepts a page_title and returns a dictionary containing 
     the title of the page in its other languages
        
@@ -795,12 +765,9 @@ def get_interlanguage_links(page_title, endpoint='en.wikipedia.org/w/api.php', r
             title = d['title']
             interlanguage_link_dict[lang] = title
             
-    if multicore_dict is None:
-        return {final_title:interlanguage_link_dict}
-    else:
-        multicore_dict[final_title] = interlanguage_link_dict
+    return interlanguage_link_dict
     
-def get_pageviews(page_title,endpoint='en.wikipedia.org',date_from='20150701',date_to='today', multicore_dict=None):
+def get_pageviews(page_title,endpoint='en.wikipedia.org',date_from='20150701',date_to='today'):
     """Takes Wikipedia page title and returns a all the various pageview records
     
     page_title - a string with the title of the page on Wikipedia
@@ -833,10 +800,7 @@ def get_pageviews(page_title,endpoint='en.wikipedia.org',date_from='20150701',da
     df['timestamp'] = pd.to_datetime(df['timestamp'],format='%Y%m%d%H')
     s = df.set_index('timestamp')['views']
         
-    if multicore_dict is None:
-        return {page_title:s}
-    else:
-        multicore_dict[page_title] = s
+    return s
     
 def get_category_memberships(page_title,endpoint='en.wikipedia.org/w/api.php'):
     """The function accepts a page_title and returns a list of categories
