@@ -962,7 +962,7 @@ def get_category_members(category_title,depth=1,endpoint='en.wikipedia.org/w/api
         if 'continue' in json_response:
             query_continue_params = deepcopy(query_params)
             query_continue_params['cmcontinue'] = json_response['continue']['cmcontinue']
-            json_response = json_response = requests.get(url = query_url, params = query_continue_params).json()
+            json_response = requests.get(url = query_url, params = query_continue_params).json()
             if 'categorymembers' in json_response['query']:
                 for member in json_response['query']['categorymembers']:
                     members.append(member['title'])
