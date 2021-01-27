@@ -616,7 +616,7 @@ def parse_to_text(input,is_json=True,parse_text=True):
     return '\n'.join(text_list)
     
 def get_page_content(page_title, endpoint='en.wikipedia.org/w/api.php', redirects=1, parsed_text=1):
-    """Takes a page_title and returns a (large) string of the content 
+    """Takes a page_title and returns a (large) plaintext string of the content 
     of the revision.
     
     page_title - a string with the title of the page on Wikipedia
@@ -628,7 +628,7 @@ def get_page_content(page_title, endpoint='en.wikipedia.org/w/api.php', redirect
     parse - 1 to return plain text or 0 to return raw HTML
     
     Returns:
-    str - a (large) string of the content of the revision
+    str - a (large) plaintext string of the content of the revision
     """
     
     # Get the response from the API for a query
@@ -651,7 +651,7 @@ def get_page_content(page_title, endpoint='en.wikipedia.org/w/api.php', redirect
     
     
 def get_revision_content(revid,endpoint='en.wikipedia.org/w/api.php',parsed_text=1):
-    """Takes a page_title and returns a (large) string of the content 
+    """Takes a page_title and returns a (large) plaintext string of the content 
     of the revision.
     
     revid - the revision ID of a revision on a wiki project
@@ -663,7 +663,7 @@ def get_revision_content(revid,endpoint='en.wikipedia.org/w/api.php',parsed_text
     parse - 1 to return plain text or 0 to return raw HTML
     
     Returns:
-    str - a (large) string of the content of the revision
+    str - a (large) plaintext string of the content of the revision
     """
     
     # Get the response from the API for a query
