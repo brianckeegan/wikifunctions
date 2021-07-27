@@ -765,7 +765,7 @@ def get_interlanguage_links(page_title, endpoint='en.wikipedia.org/w/api.php', r
             
     return interlanguage_link_dict
     
-def get_pageviews(page_title,endpoint='en.wikipedia.org',start='20150701',stop='today'):
+def get_pageviews(page_title,endpoint='en.wikipedia.org',start='20150701',stop='today',useragent='brian.keegan@colorado.edu'):
     """Takes Wikipedia page title and returns a all the various pageview records
     
     page_title - a string with the title of the page on Wikipedia
@@ -787,7 +787,8 @@ def get_pageviews(page_title,endpoint='en.wikipedia.org',start='20150701',stop='
     #for access in ['all-access','desktop','mobile-app','mobile-web']:
     #for agent in ['all-agents','user','spider','bot']:
     s = "https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article/{1}/{2}/{3}/{0}/daily/{4}/{5}".format(quoted_page_title,endpoint,'all-access','user',date_from,date_to)
-    json_response = requests.get(s).json()
+    headers = {'User-Agent':useragent}
+    json_response = requests.get(s,headers=headers).json()
     
     if 'items' in json_response:
         df = pd.DataFrame(json_response['items'])
