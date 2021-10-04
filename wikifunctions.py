@@ -748,8 +748,8 @@ def get_interlanguage_links(page_title, endpoint='en.wikipedia.org/w/api.php', r
     
     interlanguage_link_dict = dict()
     start_lang = endpoint.split('.')[0]
-    if 'title' in json_response['query'][0]:
-        final_title = json_response['query'][0]['title']
+    if 'title' in json_response['query']['pages'][0]:
+        final_title = json_response['query']['pages'][0]['title']
         interlanguage_link_dict[start_lang] = final_title
     else:
         final_title = page_title
