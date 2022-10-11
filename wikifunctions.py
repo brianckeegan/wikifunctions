@@ -877,7 +877,7 @@ def get_category_subcategories(category_title,endpoint='en.wikipedia.org/w/api.p
             
     return members
 
-def get_category_members(category_title,depth=1,endpoint='en.wikipedia.org/w/api.php',namespace=0):
+def get_category_members(category_title,depth=1,endpoint='en.wikipedia.org/w/api.php',namespace=0,prepend=True):
     """The function accepts a category_title and returns a list of category members
     
     category_title - a string (including "Category:" prefix) of the category named
@@ -896,7 +896,7 @@ def get_category_members(category_title,depth=1,endpoint='en.wikipedia.org/w/api
     category_title = category_title.replace(' ','_')
     
     # Make sure "Category:" appears in the title
-    if 'Category:' not in category_title:
+    if prepend and 'Category:' not in category_title:
         category_title = 'Category:' + category_title
     
     query_url = "https://{0}".format(endpoint)
