@@ -14,6 +14,23 @@ DEFAULT_REQUEST_TIMEOUT = float(os.environ.get("WIKIFUNCTIONS_TIMEOUT_SECONDS", 
 
 
 def _get_json(*args, **kwargs):
+    """Execute an HTTP GET request and return parsed JSON.
+
+    Adds a default `User-Agent` and timeout, preserves any caller-provided
+    headers, and raises a descriptive error when the MediaWiki API returns an
+    explicit `"error"` payload.
+
+    Args:
+        *args: Positional arguments forwarded to `requests.get`.
+        **kwargs: Keyword arguments forwarded to `requests.get`.
+
+    Returns:
+        object: Parsed JSON response body.
+
+    Raises:
+        requests.HTTPError: If the HTTP response has a non-2xx status.
+        RuntimeError: If the JSON response contains a MediaWiki `"error"` key.
+    """
     headers = kwargs.pop("headers", None)
     request_headers = dict(headers) if headers else {}
     request_headers.setdefault("User-Agent", DEFAULT_USER_AGENT)
@@ -34,6 +51,14 @@ def _get_json(*args, **kwargs):
 
 
 def _extract_section_id(section):
+    """Return the section id from an `h2` tag, if present.
+
+    Args:
+        section (bs4.element.Tag): Heading tag to inspect.
+
+    Returns:
+        str | None: Heading id from the tag itself or a nested `<span id=...>`.
+    """
     if section.has_attr("id"):
         return section.get("id")
     span = section.find("span", id=True)
@@ -43,6 +68,17 @@ def _extract_section_id(section):
 
 
 def response_to_revisions(json_response):
+    """Extract a revisions list from a MediaWiki `query` response.
+
+    Args:
+        json_response (dict): MediaWiki API response containing `query.pages`.
+
+    Returns:
+        list: Revision dictionaries, or an empty list when no revisions exist.
+
+    Raises:
+        ValueError: If `query.pages` is not a supported shape.
+    """
     if type(json_response['query']['pages']) == dict:
         page_id = list(json_response['query']['pages'].keys())[0]
         return json_response['query']['pages'][page_id]['revisions']
@@ -55,18 +91,16 @@ def response_to_revisions(json_response):
         raise ValueError("There are no revisions in the JSON")
         
 def get_all_page_revisions(page_title, endpoint='en.wikipedia.org/w/api.php', redirects=1):
-    """Takes Wikipedia page title and returns a DataFrame of revisions
-    
-    page_title - a string with the title of the page on Wikipedia
-    endpoint - a string that points to the web address of the API.
-        This defaults to the English Wikipedia endpoint: 'en.wikipedia.org/w/api.php'
-        Changing the two letter language code will return a different language edition
-        The Wikia endpoints are slightly different, e.g. 'starwars.wikia.com/api.php'
-    redirects - a Boolean value for whether to follow redirects to another page
-        
+    """Return the full revision history for a page.
+
+    Args:
+        page_title (str): Page title on the target wiki.
+        endpoint (str): MediaWiki `api.php` endpoint host/path.
+        redirects (int | bool): Whether to resolve redirects.
+
     Returns:
-    df - a pandas DataFrame where each row is a revision and columns correspond
-         to meta-data such as parentid, revid, sha1, size, timestamp, and user name
+        pandas.DataFrame: Revision metadata in chronological order, with
+        computed helper fields where source columns are available.
     """
     
     # A container to store all the revisions
@@ -131,20 +165,18 @@ def get_all_page_revisions(page_title, endpoint='en.wikipedia.org/w/api.php', re
     return df
     
 def get_page_revisions_from_date(page_title, endpoint='en.wikipedia.org/w/api.php', redirects=1, start='2001-01-01',stop='today'):
-    """Takes Wikipedia page title and returns a DataFrame of revisions
-    
-    page_title - a string with the title of the page on Wikipedia
-    endpoint - a string that points to the web address of the API.
-        This defaults to the English Wikipedia endpoint: 'en.wikipedia.org/w/api.php'
-        Changing the two letter language code will return a different language edition
-        The Wikia endpoints are slightly different, e.g. 'starwars.wikia.com/api.php'
-    redirects - a Boolean value for whether to follow redirects to another page
-    start - a string, datetime, or Timestamp object when revisions should start
-    stop - a string, datetime, or Timestamp object when revisions should stop
-        
+    """Return page revisions within a date/time interval.
+
+    Args:
+        page_title (str): Page title on the target wiki.
+        endpoint (str): MediaWiki `api.php` endpoint host/path.
+        redirects (int | bool): Whether to resolve redirects.
+        start (str | datetime-like): Inclusive window start.
+        stop (str | datetime-like): Inclusive window end.
+
     Returns:
-    df - a pandas DataFrame where each row is a revision and columns correspond
-         to meta-data such as parentid, revid, sha1, size, timestamp, and user name
+        pandas.DataFrame: Revision metadata in chronological order, with
+        computed helper fields where source columns are available.
     """
     
     # A container to store all the revisions
@@ -215,25 +247,28 @@ def get_page_revisions_from_date(page_title, endpoint='en.wikipedia.org/w/api.ph
     return df
     
 def chunks(l, n=50):
-    """
-    Yield successive n-sized chunks from l.
-    Adapted from: https://stackoverflow.com/questions/312443/how-do-you-split-a-list-into-evenly-sized-chunks    
+    """Yield fixed-size chunks from a list-like sequence.
+
+    Args:
+        l (list): Sequence to split into chunks.
+        n (int): Chunk size.
+
+    Yields:
+        list: Consecutive slices of `l` up to length `n`.
     """
     for i in range(0, len(l), n):
         yield l[i:i + n]
 
 def get_redirects_linking_here(page_title, endpoint="en.wikipedia.org/w/api.php", namespace=0):
-    """Takes a page title and returns a list of redirects linking to the page
-    
-    page_title - a string with the title of the page on Wikipedia
-    endpoint - a string that points to the web address of the API.
-        This defaults to the English Wikipedia endpoint: 'en.wikipedia.org/w/api.php'
-        Changing the two letter language code will return a different language edition
-        The Wikia endpoints are slightly different, e.g. 'starwars.wikia.com/api.php'
-    namespace - limit to pages from a specific namespace, defaults to 0
-    
+    """Return redirect pages that link to a target page.
+
+    Args:
+        page_title (str): Target page title.
+        endpoint (str): MediaWiki `api.php` endpoint host/path.
+        namespace (int | str): Namespace filter for `linkshere`.
+
     Returns:
-    linkshere - a list of strings with the redirect titles
+        list[str]: Redirect page titles that point to `page_title`.
     """
     
     # Get the response from the API for a query
@@ -275,6 +310,15 @@ def get_redirects_linking_here(page_title, endpoint="en.wikipedia.org/w/api.php"
     return [i['title'] for i in lh_list]
 
 def get_redirects_map(page_list, endpoint="en.wikipedia.org/w/api.php"):
+    """Return redirect mappings for a list of page titles.
+
+    Args:
+        page_list (list[str]): Page titles to resolve.
+        endpoint (str): MediaWiki `api.php` endpoint host/path.
+
+    Returns:
+        dict[str, str]: Mapping of redirect title -> canonical target title.
+    """
     redirects_d = {}
     
     chunked = list(chunks(page_list,50))
@@ -298,6 +342,15 @@ def get_redirects_map(page_list, endpoint="en.wikipedia.org/w/api.php"):
         
 
 def resolve_redirects(page_list,endpoint="en.wikipedia.org/w/api.php"):
+    """Resolve page titles to the titles returned by MediaWiki.
+
+    Args:
+        page_list (list[str]): Page titles to resolve.
+        endpoint (str): MediaWiki `api.php` endpoint host/path.
+
+    Returns:
+        list[str]: Titles returned in API page order for each chunk.
+    """
     resolved_page_list = []
     
     chunked = list(chunks(page_list,50))
@@ -320,18 +373,15 @@ def resolve_redirects(page_list,endpoint="en.wikipedia.org/w/api.php"):
     return resolved_page_list
 
 def get_page_raw_content(page_title, endpoint='en.wikipedia.org/w/api.php', redirects=1):
-    """Takes a page title and returns the raw HTML.
-    
-    page_title - a string with the title of the page on Wikipedia
-    endpoint - a string that points to the web address of the API.
-        This defaults to the English Wikipedia endpoint: 'en.wikipedia.org/w/api.php'
-        Changing the two letter language code will return a different language edition
-        The Wikia endpoints are slightly different, e.g. 'starwars.wikia.com/api.php'
-    redirects - 1 or 0 for whether to follow page redirects, defaults to 1
-    
+    """Return parsed HTML content for the current page revision.
+
+    Args:
+        page_title (str): Page title.
+        endpoint (str): MediaWiki `api.php` endpoint host/path.
+        redirects (int | bool): Whether to resolve redirects.
+
     Returns:
-    outlinks_per_lang - a dictionary keyed by language returning a dictionary 
-        keyed by page title returning a list of outlinks
+        str: HTML string from `action=parse`, or an empty string if unavailable.
     """
     
     # Get the response from the API for a query
@@ -360,6 +410,15 @@ def get_page_raw_content(page_title, endpoint='en.wikipedia.org/w/api.php', redi
     return markup
 
 def parse_to_links(input,is_json=True):
+    """Extract internal wiki-link titles from parsed HTML content.
+
+    Args:
+        input (dict | str): Parse JSON payload or raw HTML string.
+        is_json (bool): Whether `input` is a parse JSON response.
+
+    Returns:
+        list[str]: Link titles in approximate document order (duplicates kept).
+    """
     # Initialize an empty list to store the links
     outlinks_list = []
     
@@ -416,18 +475,15 @@ def parse_to_links(input,is_json=True):
     return outlinks_list
         
 def get_revision_raw_content(revid, endpoint='en.wikipedia.org/w/api.php', redirects=1):
-    """Takes a revision ID and returns the raw HTML.
-    
-    page_title - a string with the title of the page on Wikipedia
-    endpoint - a string that points to the web address of the API.
-        This defaults to the English Wikipedia endpoint: 'en.wikipedia.org/w/api.php'
-        Changing the two letter language code will return a different language edition
-        The Wikia endpoints are slightly different, e.g. 'starwars.wikia.com/api.php'
-    redirects - 1 or 0 for whether to follow page redirects, defaults to 1
-    
+    """Return parsed HTML content for a specific revision id.
+
+    Args:
+        revid (int | str): Revision id.
+        endpoint (str): MediaWiki `api.php` endpoint host/path.
+        redirects (int | bool): Unused for revision lookups; kept for API compatibility.
+
     Returns:
-    outlinks_per_lang - a dictionary keyed by language returning a dictionary 
-        keyed by page title returning a list of outlinks
+        str: HTML string from `action=parse`, or an empty string if unavailable.
     """
     
     # Get the response from the API for a query
@@ -451,20 +507,15 @@ def get_revision_raw_content(revid, endpoint='en.wikipedia.org/w/api.php', redir
         return str()
     
 def get_page_outlinks(page_title, endpoint='en.wikipedia.org/w/api.php', redirects=1):
-    """Takes a page title and returns a list of wiki-links on the page. The 
-    list may contain duplicates and the position in the list is approximately 
-    where the links occurred.
-    
-    page_title - a string with the title of the page on Wikipedia
-    endpoint - a string that points to the web address of the API.
-        This defaults to the English Wikipedia endpoint: 'en.wikipedia.org/w/api.php'
-        Changing the two letter language code will return a different language edition
-        The Wikia endpoints are slightly different, e.g. 'starwars.wikia.com/api.php'
-    redirects - 1 or 0 for whether to follow page redirects, defaults to 1
-    
+    """Return internal wiki-links for the current page revision.
+
+    Args:
+        page_title (str): Page title.
+        endpoint (str): MediaWiki `api.php` endpoint host/path.
+        redirects (int | bool): Whether to resolve redirects.
+
     Returns:
-    outlinks_per_lang - a dictionary keyed by language returning a dictionary 
-        keyed by page title returning a list of outlinks
+        list[str]: Outlink titles extracted from parsed page HTML.
     """
     
     # Get the response from the API for a query
@@ -493,20 +544,14 @@ def get_page_outlinks(page_title, endpoint='en.wikipedia.org/w/api.php', redirec
     return links    
     
 def get_revision_outlinks(revid, endpoint='en.wikipedia.org/w/api.php'):
-    """Takes a page title and returns a list of wiki-links on the page. The 
-    list may contain duplicates and the position in the list is approximately 
-    where the links occurred.
-    
-    page_title - a string with the title of the page on Wikipedia
-    endpoint - a string that points to the web address of the API.
-        This defaults to the English Wikipedia endpoint: 'en.wikipedia.org/w/api.php'
-        Changing the two letter language code will return a different language edition
-        The Wikia endpoints are slightly different, e.g. 'starwars.wikia.com/api.php'
-    redirects - 1 or 0 for whether to follow page redirects, defaults to 1
-    
+    """Return internal wiki-links for a specific revision id.
+
+    Args:
+        revid (int | str): Revision id.
+        endpoint (str): MediaWiki `api.php` endpoint host/path.
+
     Returns:
-    outlinks_per_lang - a dictionary keyed by language returning a dictionary 
-        keyed by page title returning a list of outlinks
+        list[str]: Outlink titles extracted from parsed revision HTML.
     """
     
     # Get the response from the API for a query
@@ -530,18 +575,15 @@ def get_revision_outlinks(revid, endpoint='en.wikipedia.org/w/api.php'):
         return list()
     
 def get_page_externallinks(page_title, endpoint='en.wikipedia.org/w/api.php', redirects=1):
-    """Takes a revision id and returns a list of external links on the revision
-    
-    revid - a numeric revision id as a string
-    endpoint - a string that points to the web address of the API.
-        This defaults to the English Wikipedia endpoint: 'en.wikipedia.org/w/api.php'
-        Changing the two letter language code will return a different language edition
-        The Wikia endpoints are slightly different, e.g. 'starwars.wikia.com/api.php'
-    redirects - 1 or 0 for whether to follow page redirects, defaults to 1
-    parse - 1 or 0 for whether to return the raw HTML or paragraph text
-    
+    """Return external links from the current page revision.
+
+    Args:
+        page_title (str): Page title.
+        endpoint (str): MediaWiki `api.php` endpoint host/path.
+        redirects (int | bool): Whether to resolve redirects.
+
     Returns:
-    str - a list of strings with the URLs
+        list[str]: External URLs from `action=parse`.
     """
     
     # Get the response from the API for a query
@@ -569,18 +611,15 @@ def get_page_externallinks(page_title, endpoint='en.wikipedia.org/w/api.php', re
     return links
             
 def get_revision_externallinks(revid, endpoint='en.wikipedia.org/w/api.php', redirects=1):
-    """Takes a revision id and returns a list of external links on the revision
-    
-    revid - a numeric revision id as a string
-    endpoint - a string that points to the web address of the API.
-        This defaults to the English Wikipedia endpoint: 'en.wikipedia.org/w/api.php'
-        Changing the two letter language code will return a different language edition
-        The Wikia endpoints are slightly different, e.g. 'starwars.wikia.com/api.php'
-    redirects - 1 or 0 for whether to follow page redirects, defaults to 1
-    parse - 1 or 0 for whether to return the raw HTML or paragraph text
-    
+    """Return external links from a specific revision id.
+
+    Args:
+        revid (int | str): Revision id.
+        endpoint (str): MediaWiki `api.php` endpoint host/path.
+        redirects (int | bool): Unused for revision lookups; kept for API compatibility.
+
     Returns:
-    str - a list of strings with the URLs
+        list[str]: External URLs from `action=parse`.
     """
     
     # Get the response from the API for a query
@@ -607,6 +646,16 @@ def get_revision_externallinks(revid, endpoint='en.wikipedia.org/w/api.php', red
     return links
         
 def parse_to_text(input,is_json=True,parse_text=True):
+    """Convert parsed HTML to paragraph text or paragraph HTML blocks.
+
+    Args:
+        input (dict | str): Parse JSON payload or raw HTML string.
+        is_json (bool): Whether `input` is a parse JSON response.
+        parse_text (bool): If True, return plain text with numeric citations removed.
+
+    Returns:
+        str: Newline-delimited paragraph content.
+    """
     if is_json:
         page_html = input['parse']['text']#['*']
     else:
@@ -649,19 +698,16 @@ def parse_to_text(input,is_json=True,parse_text=True):
     return '\n'.join(text_list)
     
 def get_page_content(page_title, endpoint='en.wikipedia.org/w/api.php', redirects=1, parsed_text=1):
-    """Takes a page_title and returns a (large) plaintext string of the content 
-    of the revision.
-    
-    page_title - a string with the title of the page on Wikipedia
-    endpoint - a string that points to the web address of the API.
-        This defaults to the English Wikipedia endpoint: 'en.wikipedia.org/w/api.php'
-        Changing the two letter language code will return a different language edition
-        The Wikia endpoints are slightly different, e.g. 'starwars.wikia.com/api.php'
-    redirects - 1 or 0 for whether to follow page redirects, defaults to 1
-    parse - 1 to return plain text or 0 to return raw HTML
-    
+    """Return paragraph content for the current page revision.
+
+    Args:
+        page_title (str): Page title.
+        endpoint (str): MediaWiki `api.php` endpoint host/path.
+        redirects (int | bool): Whether to resolve redirects.
+        parsed_text (int | bool): True for plain text, False for paragraph HTML.
+
     Returns:
-    str - a (large) plaintext string of the content of the revision
+        str: Paragraph content, or an empty string if parsing fails.
     """
     
     # Get the response from the API for a query
@@ -685,19 +731,15 @@ def get_page_content(page_title, endpoint='en.wikipedia.org/w/api.php', redirect
     
     
 def get_revision_content(revid,endpoint='en.wikipedia.org/w/api.php',parsed_text=1):
-    """Takes a page_title and returns a (large) plaintext string of the content 
-    of the revision.
-    
-    revid - the revision ID of a revision on a wiki project
-    endpoint - a string that points to the web address of the API.
-        This defaults to the English Wikipedia endpoint: 'en.wikipedia.org/w/api.php'
-        Changing the two letter language code will return a different language edition
-        The Wikia endpoints are slightly different, e.g. 'starwars.wikia.com/api.php'
-    redirects - 1 or 0 for whether to follow page redirects, defaults to 1
-    parse - 1 to return plain text or 0 to return raw HTML
-    
+    """Return paragraph content for a specific revision id.
+
+    Args:
+        revid (int | str): Revision id.
+        endpoint (str): MediaWiki `api.php` endpoint host/path.
+        parsed_text (int | bool): True for plain text, False for paragraph HTML.
+
     Returns:
-    str - a (large) plaintext string of the content of the revision
+        str: Paragraph content, or an empty string if parsing fails.
     """
     
     # Get the response from the API for a query
@@ -719,6 +761,15 @@ def get_revision_content(revid,endpoint='en.wikipedia.org/w/api.php',parsed_text
     return str()
     
 def get_page_redirects(page_list,endpoint='en.wikipedia.org/w/api.php'):
+    """Return redirect targets for each input page title.
+
+    Args:
+        page_list (list[str]): Page titles to inspect.
+        endpoint (str): MediaWiki `api.php` endpoint host/path.
+
+    Returns:
+        dict[str, str]: Mapping of original title -> resolved target title.
+    """
 
     chunked_page_list = list(chunks(page_list))
     
@@ -754,18 +805,15 @@ def get_page_redirects(page_list,endpoint='en.wikipedia.org/w/api.php'):
     return page_redirects
 
 def get_interlanguage_links(page_title, endpoint='en.wikipedia.org/w/api.php', redirects=1):
-    """The function accepts a page_title and returns a dictionary containing 
-    the title of the page in its other languages
-       
-    page_title - a string with the title of the page on Wikipedia
-    endpoint - a string that points to the web address of the API.
-        This defaults to the English Wikipedia endpoint: 'en.wikipedia.org/w/api.php'
-        Changing the two letter language code will return a different language edition
-        The Wikia endpoints are slightly different, e.g. 'starwars.wikia.com/api.php'
-    redirects - 1 or 0 for whether to follow page redirects, defaults to 1
-       
+    """Return interlanguage page-title mappings for a page.
+
+    Args:
+        page_title (str): Source page title.
+        endpoint (str): MediaWiki `api.php` endpoint host/path.
+        redirects (int | bool): Whether to resolve redirects.
+
     Returns:
-    langlink_dict - a dictionary keyed by lang codes and page title as values
+        dict[str, str]: Mapping of language code -> localized title.
     """
     
     #query_string = "https://{1}.wikipedia.org/w/api.php?action=query&format=json&prop=langlinks&formatversion=2&titles={0}&llprop=autonym|langname&lllimit=500".format(page_title,lang)
@@ -801,16 +849,20 @@ def get_interlanguage_links(page_title, endpoint='en.wikipedia.org/w/api.php', r
     return interlanguage_link_dict
     
 def get_pageviews(page_title,endpoint='en.wikipedia.org',start='20150701',stop='today',useragent='brian.keegan@colorado.edu'):
-    """Takes Wikipedia page title and returns a all the various pageview records
-    
-    page_title - a string with the title of the page on Wikipedia
-    endpoint - a string with the project domain used by the Wikimedia REST API.
-        This defaults to 'en.wikipedia.org' (not the api.php path used by MediaWiki query calls)
-    start - a date string in a YYYYMMDD format, defaults to 20150701 (earliest date)
-    stop - a date string in a YYYYMMDD format, defaults to today
-        
+    """Return daily pageviews for a page via Wikimedia REST.
+
+    Args:
+        page_title (str): Page title.
+        endpoint (str): Wikimedia project domain, for example `en.wikipedia.org`.
+        start (str | datetime-like): Start date in `YYYYMMDD` or parseable format.
+        stop (str | datetime-like): End date in `YYYYMMDD` or parseable format.
+        useragent (str): Explicit `User-Agent` for this REST request.
+
     Returns:
-    df - a DataFrame indexed by date and multi-columned by agent and access type
+        pandas.Series: Daily view counts indexed by timestamp.
+
+    Raises:
+        KeyError: If the REST payload does not include an `items` field.
     """
             
     quoted_page_title = quote(page_title, safe='')
@@ -835,14 +887,14 @@ def get_pageviews(page_title,endpoint='en.wikipedia.org',start='20150701',stop='
     return s
     
 def get_category_memberships(page_title,endpoint='en.wikipedia.org/w/api.php'):
-    """The function accepts a page_title and returns a list of categories
-    the page is a member of
-    
-    category_title - a string of the page name
-    
+    """Return category memberships for a page.
+
+    Args:
+        page_title (str): Page title.
+        endpoint (str): MediaWiki `api.php` endpoint host/path.
+
     Returns:
-    members - a list containing strings of the categories of which the page is a mamber
-    
+        list[str]: Category titles (including `Category:` prefix).
     """
     query_url = "https://{0}".format(endpoint)
     query_params = {}
@@ -874,17 +926,14 @@ def get_category_memberships(page_title,endpoint='en.wikipedia.org/w/api.php'):
     return categories
 
 def get_category_subcategories(category_title,endpoint='en.wikipedia.org/w/api.php'):
-    """The function accepts a category_title and returns a list of the category's sub-categories
-    
-    category_title - a string (including "Category:" prefix) of the category name
-    endpoint - a string that points to the web address of the API.
-        This defaults to the English Wikipedia endpoint: 'en.wikipedia.org/w/api.php'
-        Changing the two letter language code will return a different language edition
-        The Wikia endpoints are slightly different, e.g. 'starwars.wikia.com/api.php'
-    
+    """Return subcategories of a category.
+
+    Args:
+        category_title (str): Category name with or without `Category:` prefix.
+        endpoint (str): MediaWiki `api.php` endpoint host/path.
+
     Returns:
-    members - a list containing strings of the sub-categories in the category
-    
+        list[str]: Subcategory titles (including `Category:` prefix).
     """
     # Replace spaces with underscores
     category_title = category_title.replace(' ','_')
@@ -921,19 +970,17 @@ def get_category_subcategories(category_title,endpoint='en.wikipedia.org/w/api.p
     return members
 
 def get_category_members(category_title,depth=1,endpoint='en.wikipedia.org/w/api.php',namespace=0,prepend=True):
-    """The function accepts a category_title and returns a list of category members
-    
-    category_title - a string (including "Category:" prefix) of the category named
-    depth - the depth of sub-categories to crawl
-    endpoint - a string that points to the web address of the API.
-        This defaults to the English Wikipedia endpoint: 'en.wikipedia.org/w/api.php'
-        Changing the two letter language code will return a different language edition
-        The Wikia endpoints are slightly different, e.g. 'starwars.wikia.com/api.php'
-    namespace - namespaces to include (multiple namespaces separated by pipes, e.g. "0|1|2")
-    
+    """Return members of a category, optionally recursing into subcategories.
+
+    Args:
+        category_title (str): Category name with or without `Category:` prefix.
+        depth (int): Recursion depth for traversing subcategories.
+        endpoint (str): MediaWiki `api.php` endpoint host/path.
+        namespace (int | str): Namespace filter passed to `cmnamespace`.
+        prepend (bool): If True, prepend `Category:` when missing.
+
     Returns:
-    members - a list containing strings of the page titles in the category
-    
+        list[str]: Member titles across the requested traversal depth.
     """
     # Replace spaces with underscores
     category_title = category_title.replace(' ','_')
@@ -983,18 +1030,14 @@ def get_category_members(category_title,depth=1,endpoint='en.wikipedia.org/w/api
     return members
 
 def get_user_info(username_list,endpoint='en.wikipedia.org/w/api.php'):
-    """Takes a list of Wikipedia usernames and returns a JSON of their information
-    
-    username_list - a list of strings for all the usernames
-    endpoint - a string that points to the web address of the API.
-        This defaults to the English Wikipedia endpoint: 'en.wikipedia.org/w/api.php'
-        Changing the two letter language code will return a different language edition
-        The Wikia endpoints are slightly different, e.g. 'starwars.wikia.com/api.php'
-        
+    """Return metadata for one or more users.
+
+    Args:
+        username_list (list[str]): Usernames to query.
+        endpoint (str): MediaWiki `api.php` endpoint host/path.
+
     Returns:
-    users_info - a list of information about users
-    
-    API endpoint docs: https://www.mediawiki.org/wiki/API:Users
+        list[dict]: User metadata entries returned by `list=users`.
     """
     users_info = []
     
@@ -1019,21 +1062,18 @@ def get_user_info(username_list,endpoint='en.wikipedia.org/w/api.php'):
     return users_info
 
 def get_user_contributions(username,endpoint='en.wikipedia.org/w/api.php', redirects=1,start='2001-01-01',stop='today'):
-    """Takes Wikipedia username and returns a DataFrame of user contributions
-    
-    username - a string with the title of the page on Wikipedia
-    endpoint - a string that points to the web address of the API.
-        This defaults to the English Wikipedia endpoint: 'en.wikipedia.org/w/api.php'
-        Changing the two letter language code will return a different language edition
-        The Wikia endpoints are slightly different, e.g. 'starwars.wikia.com/api.php'
-    start - a string, datetime, or Timestamp for the earliest user contributions to retrieve
-    stop - a string, datetime, or Timestamp for the latest user contributions to retrieve
-        
+    """Return user contributions within a date/time interval.
+
+    Args:
+        username (str): Username to query.
+        endpoint (str): MediaWiki `api.php` endpoint host/path.
+        redirects (int | bool): Whether to resolve redirects on returned titles.
+        start (str | datetime-like): Inclusive window start.
+        stop (str | datetime-like): Inclusive window end.
+
     Returns:
-    usercontribs_df - a DataFrame containing the revision meta-data such as 
-        parentid, revid,sha1, size, timestamp, and user name
-        
-    API endpoint docs: https://www.mediawiki.org/wiki/API:Usercontribs
+        pandas.DataFrame: User contribution records with parsed timestamp/date
+        fields when available.
     """
     start = datetime.strftime(pd.to_datetime(start), '%Y-%m-%dT%H:%M:%SZ')
     stop = datetime.strftime(pd.to_datetime(stop), '%Y-%m-%dT%H:%M:%SZ')
