@@ -848,7 +848,7 @@ def get_interlanguage_links(page_title, endpoint='en.wikipedia.org/w/api.php', r
             
     return interlanguage_link_dict
     
-def get_pageviews(page_title,endpoint='en.wikipedia.org',start='20150701',stop='today',useragent='brian.keegan@colorado.edu'):
+def get_pageviews(page_title,endpoint='en.wikipedia.org',start='20150701',stop='today',useragent=None):
     """Return daily pageviews for a page via Wikimedia REST.
 
     Args:
@@ -856,7 +856,7 @@ def get_pageviews(page_title,endpoint='en.wikipedia.org',start='20150701',stop='
         endpoint (str): Wikimedia project domain, for example `en.wikipedia.org`.
         start (str | datetime-like): Start date in `YYYYMMDD` or parseable format.
         stop (str | datetime-like): End date in `YYYYMMDD` or parseable format.
-        useragent (str): Explicit `User-Agent` for this REST request.
+        useragent (str | None): Optional per-request `User-Agent` override.
 
     Returns:
         pandas.Series: Daily view counts indexed by timestamp.
@@ -872,7 +872,8 @@ def get_pageviews(page_title,endpoint='en.wikipedia.org',start='20150701',stop='
     #for access in ['all-access','desktop','mobile-app','mobile-web']:
     #for agent in ['all-agents','user','spider','bot']:
     s = "https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article/{1}/{2}/{3}/{0}/daily/{4}/{5}".format(quoted_page_title,endpoint,'all-access','user',date_from,date_to)
-    headers = {'User-Agent':useragent}
+    effective_useragent = useragent if useragent else DEFAULT_USER_AGENT
+    headers = {'User-Agent':effective_useragent}
     json_response = _get_json(s,headers=headers)
     
     if 'items' in json_response:
