@@ -3,7 +3,44 @@ from datetime import datetime
 from bs4 import BeautifulSoup
 from urllib.parse import unquote, quote
 from copy import deepcopy
+import os
 import requests, re
+
+DEFAULT_USER_AGENT = os.environ.get(
+    "WIKIFUNCTIONS_USER_AGENT",
+    "wikifunctions/0.1 (https://github.com/briankeegan/wikifunctions)",
+)
+DEFAULT_REQUEST_TIMEOUT = float(os.environ.get("WIKIFUNCTIONS_TIMEOUT_SECONDS", "30"))
+
+
+def _get_json(*args, **kwargs):
+    headers = kwargs.pop("headers", None)
+    request_headers = dict(headers) if headers else {}
+    request_headers.setdefault("User-Agent", DEFAULT_USER_AGENT)
+    kwargs["headers"] = request_headers
+    kwargs.setdefault("timeout", DEFAULT_REQUEST_TIMEOUT)
+    response = requests.get(*args, **kwargs)
+    response.raise_for_status()
+    json_response = response.json()
+    if isinstance(json_response, dict) and "error" in json_response:
+        api_error = json_response["error"]
+        raise RuntimeError(
+            "MediaWiki API error ({0}): {1}".format(
+                api_error.get("code", "unknown"),
+                api_error.get("info", "No error detail was provided."),
+            )
+        )
+    return json_response
+
+
+def _extract_section_id(section):
+    if section.has_attr("id"):
+        return section.get("id")
+    span = section.find("span", id=True)
+    if span is not None:
+        return span.get("id")
+    return None
+
 
 def response_to_revisions(json_response):
     if type(json_response['query']['pages']) == dict:
@@ -49,7 +86,7 @@ def get_all_page_revisions(page_title, endpoint='en.wikipedia.org/w/api.php', re
     query_params['formatversion'] = 2
     
     # Make the query
-    json_response = requests.get(url = query_url, params = query_params).json()
+    json_response = _get_json(url = query_url, params = query_params)
 
     # Add the temporary list to the parent list
     revision_list += response_to_revisions(json_response)
@@ -61,14 +98,14 @@ def get_all_page_revisions(page_title, endpoint='en.wikipedia.org/w/api.php', re
         if 'continue' in json_response:
             query_continue_params = deepcopy(query_params)
             query_continue_params['rvcontinue'] = json_response['continue']['rvcontinue']
-            json_response = requests.get(url = query_url, params = query_continue_params).json()
+            json_response = _get_json(url = query_url, params = query_continue_params)
             revision_list += response_to_revisions(json_response)
         
         # Older versions of the API return paginated results this way
         elif 'query-continue' in json_response:
             query_continue_params = deepcopy(query_params)
             query_continue_params['rvstartid'] = json_response['query-continue']['revisions']['rvstartid']
-            json_response = requests.get(url = query_url, params = query_continue_params).json()
+            json_response = _get_json(url = query_url, params = query_continue_params)
             revision_list += response_to_revisions(json_response)
         
         # If there are no more revisions, stop
@@ -79,14 +116,17 @@ def get_all_page_revisions(page_title, endpoint='en.wikipedia.org/w/api.php', re
     df = pd.DataFrame(revision_list)
 
     # Add in some helpful fields to the DataFrame
-    final_title = json_response['query']['pages'][0]['title']
+    final_title = json_response.get('query', {}).get('pages', [{}])[0].get('title', page_title)
     df['page'] = final_title
-    df['userid'] = df['userid'].fillna(0).apply(lambda x:str(int(x)))
-    df['timestamp'] = pd.to_datetime(df['timestamp'])
-    df['date'] = df['timestamp'].apply(lambda x:x.date())
-    df['diff'] = df['size'].diff()
-    df['lag'] = df['timestamp'].diff()/pd.Timedelta(1,'s')
-    df['age'] = (df['timestamp'] - df['timestamp'].min())/pd.Timedelta(1,'d')
+    if 'userid' in df.columns:
+        df['userid'] = df['userid'].fillna(0).apply(lambda x:str(int(x)))
+    if 'timestamp' in df.columns:
+        df['timestamp'] = pd.to_datetime(df['timestamp'])
+        df['date'] = df['timestamp'].apply(lambda x:x.date())
+        df['lag'] = df['timestamp'].diff()/pd.Timedelta(1,'s')
+        df['age'] = (df['timestamp'] - df['timestamp'].min())/pd.Timedelta(1,'d')
+    if 'size' in df.columns:
+        df['diff'] = df['size'].diff()
     
     return df
     
@@ -130,7 +170,7 @@ def get_page_revisions_from_date(page_title, endpoint='en.wikipedia.org/w/api.ph
     query_params['formatversion'] = 2
     
     # Make the query
-    json_response = requests.get(url = query_url, params = query_params).json()
+    json_response = _get_json(url = query_url, params = query_params)
 
     # Add the temporary list to the parent list
     revision_list += response_to_revisions(json_response)
@@ -142,14 +182,14 @@ def get_page_revisions_from_date(page_title, endpoint='en.wikipedia.org/w/api.ph
         if 'continue' in json_response:
             query_continue_params = deepcopy(query_params)
             query_continue_params['rvcontinue'] = json_response['continue']['rvcontinue']
-            json_response = requests.get(url = query_url, params = query_continue_params).json()
+            json_response = _get_json(url = query_url, params = query_continue_params)
             revision_list += response_to_revisions(json_response)
         
         # Older versions of the API return paginated results this way
         elif 'query-continue' in json_response:
             query_continue_params = deepcopy(query_params)
             query_continue_params['rvstartid'] = json_response['query-continue']['revisions']['rvstartid']
-            json_response = requests.get(url = query_url, params = query_continue_params).json()
+            json_response = _get_json(url = query_url, params = query_continue_params)
             revision_list += response_to_revisions(json_response)
         
         # If there are no more revisions, stop
@@ -160,14 +200,17 @@ def get_page_revisions_from_date(page_title, endpoint='en.wikipedia.org/w/api.ph
     df = pd.DataFrame(revision_list)
 
     # Add in some helpful fields to the DataFrame
-    final_title = json_response['query']['pages'][0]['title']
+    final_title = json_response.get('query', {}).get('pages', [{}])[0].get('title', page_title)
     df['page'] = final_title
-    df['userid'] = df['userid'].fillna(0).apply(lambda x:str(int(x)))
-    df['timestamp'] = pd.to_datetime(df['timestamp'])
-    df['date'] = df['timestamp'].apply(lambda x:x.date())
-    df['diff'] = df['size'].diff()
-    df['lag'] = df['timestamp'].diff()/pd.Timedelta(1,'s')
-    df['age'] = (df['timestamp'] - df['timestamp'].min())/pd.Timedelta(1,'d')
+    if 'userid' in df.columns:
+        df['userid'] = df['userid'].fillna(0).apply(lambda x:str(int(x)))
+    if 'timestamp' in df.columns:
+        df['timestamp'] = pd.to_datetime(df['timestamp'])
+        df['date'] = df['timestamp'].apply(lambda x:x.date())
+        df['lag'] = df['timestamp'].diff()/pd.Timedelta(1,'s')
+        df['age'] = (df['timestamp'] - df['timestamp'].min())/pd.Timedelta(1,'d')
+    if 'size' in df.columns:
+        df['diff'] = df['size'].diff()
 
     return df
     
@@ -211,7 +254,7 @@ def get_redirects_linking_here(page_title, endpoint="en.wikipedia.org/w/api.php"
     query_params['formatversion'] = 2
     
     # Make the query
-    json_response = requests.get(url = query_url, params = query_params).json()
+    json_response = _get_json(url = query_url, params = query_params)
     
     if 'linkshere' in json_response['query']['pages'][0]:
         subquery_lh_list = json_response['query']['pages'][0]['linkshere']
@@ -225,7 +268,7 @@ def get_redirects_linking_here(page_title, endpoint="en.wikipedia.org/w/api.php"
             else:
                 query_continue_params = deepcopy(query_params)
                 query_continue_params['lhcontinue'] = json_response['continue']['lhcontinue']
-                json_response = requests.get(url = query_url, params = query_continue_params).json()
+                json_response = _get_json(url = query_url, params = query_continue_params)
                 subquery_lh_list = json_response['query']['pages'][0]['linkshere']
                 lh_list += subquery_lh_list
     
@@ -245,7 +288,7 @@ def get_redirects_map(page_list, endpoint="en.wikipedia.org/w/api.php"):
         query_params['redirects'] = 1
         query_params['format'] = 'json'
         query_params['formatversion'] = 2
-        json_response = requests.get(url=query_url,params=query_params).json()
+        json_response = _get_json(url=query_url,params=query_params)
         
         if 'redirects' in json_response['query']:
             mapping = {redir['from']:redir['to'] for redir in json_response['query']['redirects']}
@@ -268,7 +311,7 @@ def resolve_redirects(page_list,endpoint="en.wikipedia.org/w/api.php"):
         query_params['redirects'] = 1
         query_params['format'] = 'json'
         query_params['formatversion'] = 2
-        json_response = requests.get(url=query_url,params=query_params).json()
+        json_response = _get_json(url=query_url,params=query_params)
         
         if 'pages' in json_response['query']:
             pages = [page['title'] for page in json_response['query']['pages']]
@@ -305,7 +348,7 @@ def get_page_raw_content(page_title, endpoint='en.wikipedia.org/w/api.php', redi
     query_params['format'] = 'json'
     query_params['formatversion'] = 2
     
-    json_response = requests.get(url = query_url, params = query_params).json()
+    json_response = _get_json(url = query_url, params = query_params)
     
     if 'parse' in json_response.keys():
         markup = json_response['parse']['text']
@@ -334,7 +377,8 @@ def parse_to_links(input,is_json=True):
     
     sections = soup.find_all('h2')
     for section in sections:
-        if section.span['id'] in bad_sections:
+        section_id = _extract_section_id(section)
+        if section_id in bad_sections:
 
             # Clean out the divs
             div_siblings = section.find_next_siblings('div')
@@ -356,7 +400,7 @@ def parse_to_links(input,is_json=True):
             if link.has_attr('title'):
                 title = link['title']
                 # Ignore links that aren't interesting or are redlinks
-                if all(bad not in title for bad in bad_titles) and 'redlink' not in link['href']:
+                if all(bad not in title for bad in bad_titles) and 'redlink' not in link.get('href', ''):
                     outlinks_list.append(title)
 
     # For each unordered list, extract the titles within the child links
@@ -366,7 +410,7 @@ def parse_to_links(input,is_json=True):
                 if link.has_attr('title'):
                     title = link['title']
                     # Ignore links that aren't interesting or are redlinks
-                    if all(bad not in title for bad in bad_titles) and 'redlink' not in link['href']:
+                    if all(bad not in title for bad in bad_titles) and 'redlink' not in link.get('href', ''):
                         outlinks_list.append(title)
     
     return outlinks_list
@@ -399,16 +443,12 @@ def get_revision_raw_content(revid, endpoint='en.wikipedia.org/w/api.php', redir
     query_params['format'] = 'json'
     query_params['formatversion'] = 2
     
-    json_response = requests.get(url = query_url, params = query_params).json()
+    json_response = _get_json(url = query_url, params = query_params)
     
     if 'parse' in json_response.keys():
-        markup = json_response['parse']['text']
-        final_title = json_response['parse']['title']
+        return json_response['parse']['text']
     else:
-        markup = str()
-        final_title = page_title
-        
-    return markup
+        return str()
     
 def get_page_outlinks(page_title, endpoint='en.wikipedia.org/w/api.php', redirects=1):
     """Takes a page title and returns a list of wiki-links on the page. The 
@@ -441,7 +481,7 @@ def get_page_outlinks(page_title, endpoint='en.wikipedia.org/w/api.php', redirec
     query_params['format'] = 'json'
     query_params['formatversion'] = 2
     
-    json_response = requests.get(url = query_url, params = query_params).json()
+    json_response = _get_json(url = query_url, params = query_params)
     
     if 'parse' in json_response.keys():
         links = parse_to_links(json_response)
@@ -482,14 +522,12 @@ def get_revision_outlinks(revid, endpoint='en.wikipedia.org/w/api.php'):
     query_params['format'] = 'json'
     query_params['formatversion'] = 2
     
-    json_response = requests.get(url = query_url, params = query_params).json()
+    json_response = _get_json(url = query_url, params = query_params)
     
     if 'parse' in json_response.keys():
         return parse_to_links(json_response)
     else:
         return list()
-
-    return links
     
 def get_page_externallinks(page_title, endpoint='en.wikipedia.org/w/api.php', redirects=1):
     """Takes a revision id and returns a list of external links on the revision
@@ -521,15 +559,12 @@ def get_page_externallinks(page_title, endpoint='en.wikipedia.org/w/api.php', re
     query_params['format'] = 'json'
     query_params['formatversion'] = 2
     
-    json_response = requests.get(url = query_url, params = query_params).json()
+    json_response = _get_json(url = query_url, params = query_params)
     
+    links = list()
     if 'parse' in json_response.keys():
         if 'externallinks' in json_response['parse']:
             links = json_response['parse']['externallinks']
-            final_title = json_response['parse']['title']
-    else:
-        links = list()
-        final_title = page_title
         
     return links
             
@@ -562,15 +597,12 @@ def get_revision_externallinks(revid, endpoint='en.wikipedia.org/w/api.php', red
     query_params['format'] = 'json'
     query_params['formatversion'] = 2
     
-    json_response = requests.get(url = query_url, params = query_params).json()
+    json_response = _get_json(url = query_url, params = query_params)
     
+    links = list()
     if 'parse' in json_response.keys():
         if 'externallinks' in json_response['parse']:
             links = json_response['parse']['externallinks']
-            final_title = json_response['parse']['title']
-    else:
-        links = list()
-        final_title = page_title
         
     return links
         
@@ -587,7 +619,8 @@ def parse_to_text(input,is_json=True,parse_text=True):
     bad_sections = ['See_also','Notes','References','Bibliography','External_links']
     sections = soup.find_all('h2')
     for section in sections:
-        if section.span['id'] in bad_sections:
+        section_id = _extract_section_id(section)
+        if section_id in bad_sections:
 
             # Clean out the divs
             div_siblings = section.find_next_siblings('div')
@@ -644,10 +677,11 @@ def get_page_content(page_title, endpoint='en.wikipedia.org/w/api.php', redirect
     query_params['format'] = 'json'
     query_params['formatversion'] = 2
     
-    json_response = requests.get(url = query_url, params = query_params).json()
+    json_response = _get_json(url = query_url, params = query_params)
     
     if 'parse' in json_response.keys():
-        return parse_to_text(json_response,parsed_text)
+        return parse_to_text(json_response, parse_text=bool(parsed_text))
+    return str()
     
     
 def get_revision_content(revid,endpoint='en.wikipedia.org/w/api.php',parsed_text=1):
@@ -678,10 +712,11 @@ def get_revision_content(revid,endpoint='en.wikipedia.org/w/api.php',parsed_text
     query_params['format'] = 'json'
     query_params['formatversion'] = 2
     
-    json_response = requests.get(url = query_url, params = query_params).json()
+    json_response = _get_json(url = query_url, params = query_params)
     
     if 'parse' in json_response.keys():
-        return parse_to_text(json_response,parsed_text)
+        return parse_to_text(json_response, parse_text=bool(parsed_text))
+    return str()
     
 def get_page_redirects(page_list,endpoint='en.wikipedia.org/w/api.php'):
 
@@ -703,7 +738,7 @@ def get_page_redirects(page_list,endpoint='en.wikipedia.org/w/api.php'):
         query_params['formatversion'] = 2
         
         # Make the query
-        json_response = requests.get(url = query_url, params = query_params).json()
+        json_response = _get_json(url = query_url, params = query_params)
 
         # Add the redirects to the dictionary
         if 'redirects' in json_response['query']:
@@ -744,7 +779,7 @@ def get_interlanguage_links(page_title, endpoint='en.wikipedia.org/w/api.php', r
     query_params['lllimit'] = 500
     query_params['format'] = 'json'
     query_params['formatversion'] = 2
-    json_response = requests.get(url=query_url,params=query_params).json()
+    json_response = _get_json(url=query_url,params=query_params)
     
     interlanguage_link_dict = dict()
     start_lang = endpoint.split('.')[0]
@@ -769,10 +804,8 @@ def get_pageviews(page_title,endpoint='en.wikipedia.org',start='20150701',stop='
     """Takes Wikipedia page title and returns a all the various pageview records
     
     page_title - a string with the title of the page on Wikipedia
-    endpoint - a string that points to the web address of the API.
-        This defaults to the English Wikipedia endpoint: 'en.wikipedia.org/w/api.php'
-        Changing the two letter language code will return a different language edition
-        The Wikia endpoints are slightly different, e.g. 'starwars.wikia.com/api.php'
+    endpoint - a string with the project domain used by the Wikimedia REST API.
+        This defaults to 'en.wikipedia.org' (not the api.php path used by MediaWiki query calls)
     start - a date string in a YYYYMMDD format, defaults to 20150701 (earliest date)
     stop - a date string in a YYYYMMDD format, defaults to today
         
@@ -788,7 +821,7 @@ def get_pageviews(page_title,endpoint='en.wikipedia.org',start='20150701',stop='
     #for agent in ['all-agents','user','spider','bot']:
     s = "https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article/{1}/{2}/{3}/{0}/daily/{4}/{5}".format(quoted_page_title,endpoint,'all-access','user',date_from,date_to)
     headers = {'User-Agent':useragent}
-    json_response = requests.get(s,headers=headers).json()
+    json_response = _get_json(s,headers=headers)
     
     if 'items' in json_response:
         df = pd.DataFrame(json_response['items'])
@@ -822,17 +855,21 @@ def get_category_memberships(page_title,endpoint='en.wikipedia.org/w/api.php'):
     query_params['format'] = 'json'
     query_params['formatversion'] = 2
     
-    json_response = requests.get(url=query_url,params=query_params).json()
-
     categories = list()
+    json_response = _get_json(url=query_url,params=query_params)
+    while True:
+        if 'pages' in json_response['query']:
+            if 'categories' in json_response['query']['pages'][0]:
+                for category in json_response['query']['pages'][0]['categories']:
+                    title = category['title']
+                    categories.append(title)
 
-    if 'pages' in json_response['query']:
-        if 'categories' in json_response['query']['pages'][0]:
-            for category in json_response['query']['pages'][0]['categories']:
-                title = category['title']#.split(':')[1]
-                categories.append(title)
-                #timestamp = category['timestamp']
-                #categories.append({title:timestamp})
+        if 'continue' not in json_response:
+            break
+
+        query_continue_params = deepcopy(query_params)
+        query_continue_params['clcontinue'] = json_response['continue']['clcontinue']
+        json_response = _get_json(url=query_url, params=query_continue_params)
             
     return categories
 
@@ -867,13 +904,19 @@ def get_category_subcategories(category_title,endpoint='en.wikipedia.org/w/api.p
     query_params['format'] = 'json'
     query_params['formatversion'] = 2
         
-    json_response = requests.get(url = query_url, params = query_params).json()
-    
     members = list()
-    
-    if 'categorymembers' in json_response['query']:
-        for member in json_response['query']['categorymembers']:
-            members.append(member['title'])
+    json_response = _get_json(url = query_url, params = query_params)
+    while True:
+        if 'categorymembers' in json_response['query']:
+            for member in json_response['query']['categorymembers']:
+                members.append(member['title'])
+
+        if 'continue' not in json_response:
+            break
+
+        query_continue_params = deepcopy(query_params)
+        query_continue_params['cmcontinue'] = json_response['continue']['cmcontinue']
+        json_response = _get_json(url = query_url, params = query_continue_params)
             
     return members
 
@@ -910,7 +953,7 @@ def get_category_members(category_title,depth=1,endpoint='en.wikipedia.org/w/api
     query_params['format'] = 'json'
     query_params['formatversion'] = 2
         
-    json_response = requests.get(url = query_url, params = query_params).json()
+    json_response = _get_json(url = query_url, params = query_params)
 
     members = list()
     
@@ -925,7 +968,7 @@ def get_category_members(category_title,depth=1,endpoint='en.wikipedia.org/w/api
         if 'continue' in json_response:
             query_continue_params = deepcopy(query_params)
             query_continue_params['cmcontinue'] = json_response['continue']['cmcontinue']
-            json_response = requests.get(url = query_url, params = query_continue_params).json()
+            json_response = _get_json(url = query_url, params = query_continue_params)
             if 'categorymembers' in json_response['query']:
                 for member in json_response['query']['categorymembers']:
                     members.append(member['title'])
@@ -969,7 +1012,7 @@ def get_user_info(username_list,endpoint='en.wikipedia.org/w/api.php'):
         query_params['format'] = 'json'
         query_params['formatversion'] = 2
         
-        json_response = requests.get(url = query_url, params = query_params).json()
+        json_response = _get_json(url = query_url, params = query_params)
         if 'query' in json_response:
             users_info += json_response['query']['users']
     
@@ -1009,11 +1052,11 @@ def get_user_contributions(username,endpoint='en.wikipedia.org/w/api.php', redir
     query_params['uclimit'] = 500
     query_params['ucdir'] = 'newer'
     query_params['format'] = 'json'
-    query_params['redirects'] = 1
+    query_params['redirects'] = redirects
     query_params['formatversion'] = 2
     
     # Make the query
-    json_response = requests.get(url = query_url, params = query_params).json()
+    json_response = _get_json(url = query_url, params = query_params)
     
     if 'query' in json_response:
         
@@ -1029,7 +1072,7 @@ def get_user_contributions(username,endpoint='en.wikipedia.org/w/api.php', redir
             else:
                 query_continue_params = deepcopy(query_params)
                 query_continue_params['uccontinue'] = json_response['continue']['uccontinue']
-                json_response = requests.get(url = query_url, params = query_continue_params).json()
+                json_response = _get_json(url = query_url, params = query_continue_params)
                 subquery_revision_list = json_response['query']['usercontribs']
                 revision_list += subquery_revision_list
                 #time.sleep(1)
@@ -1037,8 +1080,10 @@ def get_user_contributions(username,endpoint='en.wikipedia.org/w/api.php', redir
     df = pd.DataFrame(revision_list)
     
     if len(df.columns) > 0:
-        df['timestamp'] = pd.to_datetime(df['timestamp'])
-        df['date'] = df['timestamp'].apply(lambda x:x.date())
-        df['userid'] = df['userid'].fillna(0).apply(lambda x:str(int(x)))
+        if 'timestamp' in df.columns:
+            df['timestamp'] = pd.to_datetime(df['timestamp'])
+            df['date'] = df['timestamp'].apply(lambda x:x.date())
+        if 'userid' in df.columns:
+            df['userid'] = df['userid'].fillna(0).apply(lambda x:str(int(x)))
 
     return df
